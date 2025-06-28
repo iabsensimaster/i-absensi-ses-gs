@@ -1,1 +1,2 @@
-# i-absensi-ses-gs
+# absensi-app
+Absensi Karyawan

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rekap Absensi Bulanan</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+  <script src="config.js"></script>
+  <style>
+    .loader {
+      border: 4px solid #e5e7eb;
+      border-top: 4px solid #6366f1;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 relative">
+
+  <!-- Spinner Loading -->
+  <div id="loadingOverlay" class="hidden fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+    <div class="loader"></div>
+  </div>
+
+  <!-- Tombol Dashboard -->
+  <a href="dashboard.html" class="absolute top-4 right-4 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded shadow text-sm">
+    Dashboard
+  </a>
+
+  <!-- Container -->
+  <div class="max-w-7xl mx-auto bg-white rounded-xl shadow p-6 mt-8">
+    <h1 class="text-2xl font-semibold mb-4">📅 Rekap Absensi Bulanan</h1>
+
+    <!-- Filter -->
+    <div class="flex flex-wrap gap-4 mb-4 items-center">
+      <select id="bulan" class="border border-gray-300 rounded px-4 py-2">
+        <option value="">-- Pilih Bulan --</option>
+      </select>
+      <select id="tahun" class="border border-gray-300 rounded px-4 py-2">
+        <option value="">-- Pilih Tahun --</option>
+      </select>
+      <select id="filterNama" class="border border-gray-300 rounded px-4 py-2">
+        <option value="">-- Semua Karyawan --</option>
+      </select>
+      <button id="downloadBtn" class="ml-auto bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700">
+        ⬇️ Download Excel
+      </button>
+    </div>
+
+    <!-- Tabel Rekap -->
+    <div class="overflow-auto">
+      <table id="rekapTable" class="table-auto w-full border text-sm">
+        <thead id="thead" class="bg-gray-200"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+     // Cek status login
+    if (localStorage.getItem('loggedIn') !== 'true') {
+      window.location.href = 'login.html';
+    }
+
+    // Fungsi Logout
+    function logout() {
+      localStorage.removeItem('loggedIn');
+      window.location.href = 'login.html';
+    }
+    const bulanSelect = document.getElementById('bulan');
+    const tahunSelect = document.getElementById('tahun');
+    const namaSelect = document.getElementById('filterNama');
+    const thead = document.getElementById('thead');
+    const tbody = document.getElementById('tbody');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+
+    const bulanNama = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+
+    // Isi dropdown bulan
+    bulanNama.forEach((b, i) => {
+      const opt = document.createElement('option');
+      opt.value = (i+1).toString().padStart(2, '0');
+      opt.textContent = b;
+      bulanSelect.appendChild(opt);
+    });
+
+    // Isi dropdown tahun (5 tahun ke belakang)
+    const currentYear = new Date().getFullYear();
+    for (let y = currentYear; y >= currentYear - 5; y--) {
+      const opt = document.createElement('option');
+      opt.value = y.toString();
+      opt.textContent = y.toString();
+      tahunSelect.appendChild(opt);
+    }
+
+    // Fetch nama karyawan
+    fetch(API_ENDPOINT + '?action=nama')
+      .then(r => r.json())
+      .then(data => {
+        data.forEach(n => {
+          const opt = document.createElement('option');
+          opt.value = opt.textContent = n;
+          namaSelect.appendChild(opt);
+        });
+      });
+
+    bulanSelect.addEventListener('change', loadRekap);
+    tahunSelect.addEventListener('change', loadRekap);
+    namaSelect.addEventListener('change', () => renderTable(globalData, namaSelect.value));
+
+    let globalData = [];
+
+    async function loadRekap() {
+      const bulan = bulanSelect.value;
+      const tahun = tahunSelect.value;
+      if (!bulan || !tahun) return;
+
+      loadingOverlay.classList.remove('hidden');
+
+      try {
+        const res = await fetch(`${API_ENDPOINT}?action=rekap&bulan=${bulan}&tahun=${tahun}`);
+        const data = await res.json();
+        globalData = data;
+        renderTable(data, namaSelect.value);
+      } catch (err) {
+        alert("Gagal memuat data rekap.");
+      } finally {
+        loadingOverlay.classList.add('hidden');
+      }
+    }
+
+    function renderTable(data, filterNama) {
+      const days = Array.from({ length: 31 }, (_, i) => i + 1);
+      const table = {};
+      const allNames = new Set();
+
+      data.forEach(row => {
+        const [d, m, y] = row.tanggal.split("/");
+        if (!table[row.nama]) table[row.nama] = {};
+        table[row.nama][parseInt(d)] = {
+          masuk: row.masuk || '-',
+          pulang: row.pulang || '-'
+        };
+        allNames.add(row.nama);
+      });
+
+      const filteredNames = Array.from(allNames).filter(n => !filterNama || n === filterNama);
+
+      thead.innerHTML = `
+        <tr>
+          <th rowspan="2" class='border px-2 py-1 bg-gray-100'>Nama</th>
+          ${days.map(d => `<th colspan="2" class='border px-2 py-1 text-center bg-gray-100'>${d}</th>`).join('')}
+        </tr>
+        <tr>
+          ${days.map(() => `
+            <th class='border px-1 py-1 text-center'>Masuk</th>
+            <th class='border px-1 py-1 text-center'>Pulang</th>
+          `).join('')}
+        </tr>
+      `;
+
+      tbody.innerHTML = filteredNames.map(nama => {
+        const row = days.map(d => {
+          const jam = table[nama]?.[d] || { masuk: '-', pulang: '-' };
+          return `
+            <td class='border px-2 py-1 text-center'>${jam.masuk}</td>
+            <td class='border px-2 py-1 text-center'>${jam.pulang}</td>
+          `;
+        }).join('');
+        return `<tr><td class='border px-2 py-1 font-medium'>${nama}</td>${row}</tr>`;
+      }).join('');
+    }
+
+    // Download ke Excel
+    downloadBtn.addEventListener('click', () => {
+      const wb = XLSX.utils.book_new();
+      const days = Array.from({ length: 31 }, (_, i) => i + 1);
+      const ws_data = [
+        ["Nama", ...days.flatMap(d => [d + " Masuk", d + " Pulang"])]
+      ];
+      document.querySelectorAll("#tbody tr").forEach(tr => {
+        const row = Array.from(tr.children).map(td => td.textContent);
+        ws_data.push(row);
+      });
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      XLSX.utils.book_append_sheet(wb, ws, "Rekap");
+      const bulanText = bulanSelect.options[bulanSelect.selectedIndex]?.text || 'Bulan';
+      const tahunText = tahunSelect.value || 'Tahun';
+      XLSX.writeFile(wb, `Rekap_${bulanText}_${tahunText}.xlsx`);
+    });
+      setTimeout(() => localStorage.removeItem('loggedIn'), 300000);
+  </script>
+</body>
+</html>

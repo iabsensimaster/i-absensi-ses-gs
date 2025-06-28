@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Data Absensi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen px-4 py-6">
+  <div class="max-w-6xl mx-auto">
+    <div class="flex justify-between items-center mb-6">
+  <h1 class="text-2xl font-bold text-indigo-700">📋 Rekap Absensi Harian</h1>
+  <div class="flex gap-2">
+    <button onclick="downloadExcel()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-sm shadow">
+      ⬇️ Download Excel
+    </button>
+    <a href="dashboard.html" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm shadow">
+      🏠 Dashboard
+    </a>
+  </div>
+</div>
+
+
+    <div class="grid md:grid-cols-4 sm:grid-cols-2 gap-4 mb-4">
+      <div>
+        <label class="block text-sm text-gray-600">Tipe Absen</label>
+        <select id="filterTipe" class="w-full p-2 rounded border">
+          <option value="">Semua</option>
+          <option value="Masuk">Masuk</option>
+          <option value="Pulang">Pulang</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-sm text-gray-600">Nama</label>
+        <select id="filterNama" class="w-full p-2 rounded border">
+          <option value="">Semua</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-sm text-gray-600">Dari Tanggal</label>
+        <input type="date" id="filterDari" class="w-full p-2 rounded border">
+      </div>
+
+      <div>
+        <label class="block text-sm text-gray-600">Sampai Tanggal</label>
+        <input type="date" id="filterSampai" class="w-full p-2 rounded border">
+      </div>
+    </div>
+
+    <!-- Spinner -->
+    <div id="spinner" class="flex justify-center my-6 hidden">
+      <div class="w-10 h-10 border-4 border-blue-300 border-t-blue-600 rounded-full animate-spin"></div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full bg-white rounded-xl shadow-md">
+        <thead class="bg-indigo-600 text-white">
+          <tr>
+            <th class="p-2 text-left text-sm">Tanggal</th>
+            <th class="p-2 text-left text-sm">Nama</th>
+            <th class="p-2 text-left text-sm">Tipe</th>
+            <th class="p-2 text-left text-sm">Lokasi</th>
+            <th class="p-2 text-left text-sm">Foto</th>
+          </tr>
+        </thead>
+        <tbody id="tabelAbsensi" class="text-sm text-gray-700"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+    // Cek status login
+    if (localStorage.getItem('loggedIn') !== 'true') {
+      window.location.href = 'login.html';
+    }
+
+    // Fungsi Logout
+    function logout() {
+      localStorage.removeItem('loggedIn');
+      window.location.href = 'login.html';
+    }
+    const API_ABSENSI = API_ENDPOINT + '?action=absensi';
+    const API_NAMA = API_ENDPOINT + '?action=nama';
+
+    const tbody = document.getElementById("tabelAbsensi");
+    const filterTipe = document.getElementById("filterTipe");
+    const filterNama = document.getElementById("filterNama");
+    const filterDari = document.getElementById("filterDari");
+    const filterSampai = document.getElementById("filterSampai");
+    const spinner = document.getElementById("spinner");
+
+    let dataAbsensi = [];
+function setDefaultTanggalHariIni() {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const todayStr = `${yyyy}-${mm}-${dd}`;
+
+  filterDari.value = todayStr;
+  filterSampai.value = todayStr;
+}
+function fetchData() {
+  spinner.classList.remove("hidden");
+  fetch(API_ABSENSI)
+    .then(r => r.json())
+    .then(data => {
+      dataAbsensi = data;
+      updateFilterNama(data);
+      setDefaultTanggalHariIni(); // ⬅️ Tambahkan ini
+      renderTabel();
+    })
+    .catch(err => alert("Gagal ambil data: " + err.message))
+    .finally(() => spinner.classList.add("hidden"));
+}
+
+    function extractDriveId(url) {
+      const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      return match ? match[1] : null;
+    }
+
+    function updateFilterNama(data) {
+      const namaUnik = [...new Set(data.map(d => d.nama))];
+      filterNama.innerHTML = '<option value="">Semua</option>';
+      namaUnik.forEach(n => {
+        const o = document.createElement("option");
+        o.value = o.textContent = n;
+        filterNama.appendChild(o);
+      });
+    }
+
+    function renderTabel() {
+      const dari = filterDari.value;
+      const sampai = filterSampai.value;
+      const tipe = filterTipe.value;
+      const nama = filterNama.value;
+
+      const hasil = dataAbsensi.filter(d => {
+        const tanggal = d.timestamp.split(" ")[0].split("/").reverse().join("-");
+        return (!dari || tanggal >= dari) &&
+               (!sampai || tanggal <= sampai) &&
+               (!tipe || d.tipe === tipe) &&
+               (!nama || d.nama === nama);
+      });
+
+      tbody.innerHTML = hasil.map(r => `
+        <tr class="border-t">
+          <td class="p-2">${r.timestamp}</td>
+          <td class="p-2">${r.nama}</td>
+          <td class="p-2">${r.tipe}</td>
+          <td class="p-2"><a href="${r.lokasi}" target="_blank" class="text-blue-600 underline">Lihat Lokasi</a></td>
+          <td class="p-2">
+            ${
+              r.link && r.link.includes("https://drive.google.com")
+                ? `<a href="${r.link}" target="_blank">
+                     <img src="https://drive.google.com/thumbnail?id=${extractDriveId(r.link)}&sz=w200" alt="Foto" class="h-16 rounded shadow-md hover:scale-105 transition duration-150" loading="lazy" />
+                   </a>`
+                : '<span class="text-red-600 italic">Foto tidak ada</span>'
+            }
+          </td>
+        </tr>
+      `).join("");
+    }
+
+function downloadExcel() {
+  const wb = XLSX.utils.book_new();
+  const wsData = [
+    ["Tanggal", "Nama", "Tipe", "Lokasi", "Link Foto"],
+    ...dataAbsensi
+      .filter(d => {
+        const tanggal = d.timestamp.split(" ")[0].split("/").reverse().join("-");
+        return (!filterDari.value || tanggal >= filterDari.value) &&
+               (!filterSampai.value || tanggal <= filterSampai.value);
+      })
+      .map(d => [d.timestamp, d.nama, d.tipe, d.lokasi, d.link])
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  XLSX.utils.book_append_sheet(wb, ws, "Absensi");
+
+  // Buat nama file berdasarkan tanggal
+  const dari = filterDari.value || "semua";
+  const sampai = filterSampai.value || "semua";
+  const fileName = `absensi_${dari}_sampai_${sampai}.xlsx`.replace(/:/g, "-");
+
+  XLSX.writeFile(wb, fileName);
+}
+
+    filterTipe.onchange = renderTabel;
+    filterNama.onchange = renderTabel;
+    filterDari.onchange = renderTabel;
+    filterSampai.onchange = renderTabel;
+
+    fetchData();
+    setTimeout(() => localStorage.removeItem('loggedIn'), 300000);
+  </script>
+</body>
+</html>

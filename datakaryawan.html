@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manajemen Karyawan</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .loader {
+      border: 4px solid #e5e7eb;
+      border-top: 4px solid #6366f1;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+  <script src="config.js"></script>
+</head>
+<body class="bg-gradient-to-br from-indigo-100 to-white min-h-screen px-4 py-6">
+
+  <!-- Tombol Dashboard -->
+  <a href="dashboard.html" class="absolute top-4 right-4 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl shadow-md text-sm">
+    Dashboard
+  </a>
+
+  <!-- Container -->
+  <div class="max-w-2xl mx-auto bg-white shadow-xl rounded-2xl p-6 space-y-6">
+    <h1 class="text-2xl font-semibold text-indigo-700 text-center">👥 Manajemen Data Karyawan</h1>
+
+    <!-- Form Tambah/Edit -->
+    <form id="formKaryawan" class="space-y-4">
+      <input type="hidden" id="indexEdit">
+      <div>
+        <label for="nama" class="text-sm font-medium text-gray-600">Nama Karyawan</label>
+        <input type="text" id="nama" required class="mt-1 w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+      </div>
+      <button type="submit" class="w-full bg-indigo-600 text-white py-2.5 rounded-lg shadow hover:bg-indigo-700">
+        💾 Simpan Data
+      </button>
+      <div id="spinner" class="hidden flex justify-center mt-2"><div class="loader"></div></div>
+    </form>
+
+    <!-- Tabel Data -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm text-left border">
+        <thead class="bg-indigo-100">
+          <tr>
+            <th class="border px-3 py-2">No</th>
+            <th class="border px-3 py-2">Nama</th>
+            <th class="border px-3 py-2">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="tabelKaryawan"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    // Cek status login
+    if (localStorage.getItem('loggedIn') !== 'true') {
+      window.location.href = 'login.html';
+    }
+
+    // Fungsi Logout
+    function logout() {
+      localStorage.removeItem('loggedIn');
+      window.location.href = 'login.html';
+    }
+    
+    const tabel = document.getElementById("tabelKaryawan");
+    const form = document.getElementById("formKaryawan");
+    const namaInput = document.getElementById("nama");
+    const indexEdit = document.getElementById("indexEdit");
+    const spinner = document.getElementById("spinner");
+
+    async function loadData() {
+      const res = await fetch(API_ENDPOINT + '?action=nama');
+      const data = await res.json();
+      tabel.innerHTML = data.map((n, i) => `
+        <tr class="border-b">
+          <td class="border px-3 py-1 text-center">${i + 2}</td>
+          <td class="border px-3 py-1">${n}</td>
+          <td class="border px-3 py-1 space-x-1 text-center">
+            <button onclick="edit(${i + 2}, '${n}')" class="text-blue-600 hover:underline">✏️ Edit</button>
+            <button onclick="hapus(${i + 2})" class="text-red-600 hover:underline">🗑️ Hapus</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function sendData(payload) {
+      spinner.classList.remove("hidden");
+      const res = await fetch(API_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload)
+      });
+      const result = await res.json();
+      spinner.classList.add("hidden");
+      if (result.status === 'success') {
+        form.reset();
+        indexEdit.value = "";
+        loadData();
+      } else {
+        alert("Gagal: " + result.message);
+      }
+    }
+
+    form.addEventListener("submit", e => {
+      e.preventDefault();
+      const nama = namaInput.value.trim();
+      if (!nama) return;
+      const index = indexEdit.value;
+      const action = index ? "edit" : "tambah";
+      const payload = index ? { action, index, nama } : { action, nama };
+      sendData(payload);
+    });
+
+    function edit(index, nama) {
+      namaInput.value = nama;
+      indexEdit.value = index;
+    }
+
+    async function hapus(index) {
+      if (!confirm("Yakin ingin menghapus data ini?")) return;
+      await sendData({ action: "hapus", index });
+    }
+
+    loadData();
+     setTimeout(() => localStorage.removeItem('loggedIn'), 300000);
+  </script>
+</body>
+</html>
